@@ -4,7 +4,7 @@
 
   "outline_system_prompt": "You are an expert content strategist for a faceless YouTube sleep history channel. You create extremely detailed script outlines. You understand narrative structure, historical storytelling, and how to pace a 2+ hour sleep video.",
 
-  "outline_user_prompt_template": "I need a detailed outline for a YouTube sleep history script.\n\nTitle: {title}\nTarget total script length: {target_words} words.\n\nReturn ONLY valid JSON (no markdown fences, no explanation) with this exact structure:\n{{\n  \"sections\": [\n    {{\n      \"id\": \"A\",\n      \"title\": \"THE HOOK\",\n      \"word_target\": \"40-60\",\n      \"content_notes\": \"Detailed notes on what to write...\",\n      \"key_details\": [\"detail 1\", \"detail 2\"]\n    }}\n  ]\n}}\n\nCreate these sections in order:\n- A: THE HOOK (40-60 words)\n- B: EARLY CTA + SLEEP RITUAL (150-200 words)\n- C: THE QUESTION BARRAGE (250-350 words)\n- D: THE TIME-TRAVEL DROP (100-150 words)\n- Then 10-14 numbered body sections (1, 2, 3...) covering the full topic chronologically. Their word_targets should add up to approximately {target_words} minus 1500 words. Each body section should target 1200-1500 words.\n- Final section: OUTRO (500-600 words)\n\nFor every section, make content_notes EXTREMELY detailed — include specific historical facts, real names, real dates, real events, vivid sensory details, and specific angles to cover. The writer will use these notes as their sole research source, so be thorough and accurate.\n\nFor key_details, list 6-10 specific facts, names, or events that MUST be mentioned in that section.",
+  "outline_user_prompt_template": "I need a detailed outline for a YouTube sleep history script.\n\nTitle: {title}\nTarget total script length: {target_words} words.\n\nReturn ONLY valid JSON (no markdown fences, no explanation) with this exact structure:\n{{\n  \"sections\": [\n    {{\n      \"id\": \"A\",\n      \"title\": \"THE HOOK\",\n      \"word_target\": \"40-60\",\n      \"content_notes\": \"Detailed notes on what to write...\",\n      \"key_details\": [\"detail 1\", \"detail 2\"]\n    }}\n  ]\n}}\n\nCreate these sections in order:\n- A: THE HOOK (40-60 words)\n- B: EARLY CTA + SLEEP RITUAL (150-200 words)\n- C: THE QUESTION BARRAGE (250-350 words)\n- D: THE TIME-TRAVEL DROP (100-150 words)\n- Then 6-8 numbered body sections (1, 2, 3...) covering the full topic chronologically. Their word_targets should add up to approximately {target_words} minus 1500 words. Each body section should target 2000-3000 words.\n- Final section: OUTRO (500-600 words)\n\nFor every section, make content_notes EXTREMELY detailed — include specific historical facts, real names, real dates, real events, vivid sensory details, and specific angles to cover. The writer will use these notes as their sole research source, so be thorough and accurate.\n\nFor the short intro sections (A, B, C, D) and OUTRO, list 6-10 key_details. For the numbered body sections (which are now much larger at 2000-3000 words), list 15-20 key_details each — specific facts, names, dates, events, anecdotes, and sensory beats — and write content_notes that are 2-3x longer than you normally would, so the writer has enough material to produce the full word target without padding or repetition.",
 
   "outline_max_tokens": 32000,
   "outline_temperature": 0.7,
@@ -15,7 +15,7 @@
 
   "section_max_tokens": {
     "intro": 2000,
-    "body": 6000,
+    "body": 8000,
     "outro": 3000
   },
 
