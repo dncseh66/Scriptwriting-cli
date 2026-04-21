@@ -14,9 +14,9 @@
   "section_user_prompt_template": "=== SOP ===\n{sop_text}\n\n=== FULL OUTLINE ===\n{outline_json}\n\n=== PREVIOUS SCRIPT (last {context_window_words} words) ===\n{previous_script_tail}\n\n=== YOUR TASK ===\nWrite section {section_id}: {section_title}.\nTarget word count for this section: {section_word_target} words.\nFollow the SOP instructions for this section type exactly. Use the content_notes and key_details from the outline as your guide for what to cover.\nWrite ONLY the raw script text for this section. No headers, no section labels, no meta-commentary. Just the narration text, ready to be read aloud.",
 
   "section_max_tokens": {
-    "intro": 2000,
-    "body": 8000,
-    "outro": 3000
+    "intro": 3000,
+    "body": 16000,
+    "outro": 4000
   },
 
   "section_type_rules": {
