@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git checkout *)",
+      "Bash(git push *)",
+      "Bash(git add *)",
+      "Bash(git commit -m 'Outline: 6-8 body sections at 2000-3000 words with denser key_details *)",
+      "Bash(git commit -m 'Raise section_max_tokens: body 8000->16000, intro 2000->3000, outro 3000->4000 *)"
+    ]
+  }
+}

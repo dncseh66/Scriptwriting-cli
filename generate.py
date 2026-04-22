@@ -1,31 +1,43 @@
 #!/usr/bin/env python3
-"""Interactive batch script generator.
+"""Batch script generator.
 
-Collects multiple titles, then generates all scripts in parallel using the
-Anthropic Messages Batches API (50% cost savings). Uses prompt caching on
-the SOP for additional savings across many section calls.
+Reads titles from a titles.txt file in the working folder, then generates
+all scripts in parallel using the Anthropic Messages Batches API
+(50% cost savings). Uses prompt caching on the SOP.
+
+titles.txt format — one line per video:
+    MD0001 Life of pirates - 18000
+    MD0002 Viking women warriors - 16000
+
+Where:
+    - First whitespace-separated token is the Video ID (used as folder
+      name AND output filename, e.g. MD0001/MD0001.txt).
+    - Everything up to the last " - " is the title.
+    - The number after " - " is the target word count.
 """
 import json
+import re
 import sys
 from pathlib import Path
 
 from batch_client import BatchClient
 from utils import (
-    count_words, sanitize_folder_name, tail_words,
+    count_words, tail_words,
     read_text, write_text, append_text, section_type,
 )
 
 ROOT = Path(__file__).parent
 CONFIG_PATH = ROOT / "config.json"
 PROFILES_DIR = ROOT / "profiles"
+TITLES_FILENAME = "titles.txt"
 
 
 def load_config():
     if not CONFIG_PATH.exists():
-        print(f"ERROR: config.json not found. Copy config.example.json to config.json and fill in your API key.")
+        print("ERROR: config.json not found. Copy config.example.json to config.json and fill in your API key.")
         sys.exit(1)
     cfg = json.loads(read_text(CONFIG_PATH))
-    if not cfg.get("api_key") or "REPLACE" in cfg["api_key"]:
+    if not cfg.get("api_key") or "REPLACE" in cfg["api_key"] or "PASTE" in cfg["api_key"]:
         print("ERROR: set your API key in config.json")
         sys.exit(1)
     return cfg
@@ -39,7 +51,7 @@ def list_profiles():
 
 
 def prompt_working_folder(default):
-    raw = input(f"Working folder where scripts will be saved [{default}]: ").strip()
+    raw = input(f"Working folder (must contain {TITLES_FILENAME}) [{default}]: ").strip()
     folder = Path(raw or default).expanduser().resolve()
     folder.mkdir(parents=True, exist_ok=True)
     return folder
@@ -60,41 +72,71 @@ def prompt_profile():
         print("Invalid choice.")
 
 
-def prompt_titles():
-    print("\nEnter titles one per line as: TITLE | WORD_COUNT")
-    print("Example: The Forgotten Women Who Disguised Themselves as Sailors | 18000")
-    print("Press ENTER on an empty line when done.\n")
+VIDEO_ID_RE = re.compile(r"^[A-Za-z0-9_-]+$")
+
+
+def parse_titles_line(line: str):
+    """Parse one line of titles.txt. Returns (video_id, title, word_count) or None."""
+    line = line.strip()
+    if not line or line.startswith("#"):
+        return None
+
+    # Split into video ID and the rest
+    parts = line.split(None, 1)
+    if len(parts) != 2:
+        raise ValueError(f"expected '<ID> <title> - <word_count>', got: {line!r}")
+    video_id, rest = parts[0], parts[1]
+
+    if not VIDEO_ID_RE.match(video_id):
+        raise ValueError(f"video ID {video_id!r} must be letters/digits/_/- only")
+
+    # Split off the word count from the end on the last ' - '
+    if " - " not in rest:
+        raise ValueError(f"missing ' - <word_count>' in: {line!r}")
+    title_str, _, wc_str = rest.rpartition(" - ")
+    title_str = title_str.strip()
+    try:
+        wc = int(wc_str.strip())
+    except ValueError:
+        raise ValueError(f"word count must be a number, got {wc_str!r}")
+    if not title_str:
+        raise ValueError(f"empty title in: {line!r}")
+
+    return (video_id, title_str, wc)
+
+
+def load_titles_file(working_folder: Path):
+    path = working_folder / TITLES_FILENAME
+    if not path.exists():
+        print(f"ERROR: {path} not found.")
+        print(f"Create {TITLES_FILENAME} in the working folder with lines like:")
+        print(f"    MD0001 Life of pirates - 18000")
+        sys.exit(1)
+
     titles = []
-    while True:
-        line = input(f"Title {len(titles)+1}: ").strip()
-        if not line:
-            if not titles:
-                print("Enter at least one title.")
-                continue
-            return titles
-        if "|" not in line:
-            print("Format: TITLE | WORD_COUNT")
-            continue
-        title_str, _, wc_str = line.rpartition("|")
-        title_str = title_str.strip()
+    seen_ids = set()
+    for i, raw in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
         try:
-            wc = int(wc_str.strip())
-        except ValueError:
-            print("Word count must be a number.")
+            parsed = parse_titles_line(raw)
+        except ValueError as e:
+            print(f"ERROR on line {i} of {TITLES_FILENAME}: {e}")
+            sys.exit(1)
+        if parsed is None:
             continue
-        if not title_str:
-            print("Title cannot be empty.")
-            continue
-        titles.append((title_str, wc))
+        vid, _, _ = parsed
+        if vid in seen_ids:
+            print(f"ERROR on line {i}: duplicate video ID {vid!r}")
+            sys.exit(1)
+        seen_ids.add(vid)
+        titles.append(parsed)
+
+    if not titles:
+        print(f"ERROR: {path} has no valid title lines.")
+        sys.exit(1)
+    return titles
 
 
 def build_system_blocks(profile, sop_text, kind):
-    """Build system blocks with prompt caching on the SOP prefix.
-
-    For sections, the SOP is included in the system prompt and cached; the
-    volatile parts (outline, previous_script_tail, section target) go in the
-    user message. For outlines there is no SOP reuse benefit, so plain string.
-    """
     if kind == "outline":
         return profile["outline_system_prompt"]
 
@@ -111,12 +153,12 @@ def build_system_blocks(profile, sop_text, kind):
 
 def generate_outlines(bc: BatchClient, profile, titles, output_dirs):
     requests = []
-    for (title, wc), out_dir in zip(titles, output_dirs):
+    for idx, ((vid, title, wc), out_dir) in enumerate(zip(titles, output_dirs)):
         user_prompt = profile["outline_user_prompt_template"].format(
             title=title, target_words=wc,
         )
         requests.append(bc.build_request(
-            custom_id=f"outline__{out_dir.name}",
+            custom_id=f"outline-{idx}",
             system=build_system_blocks(profile, "", "outline"),
             user_prompt=user_prompt,
             max_tokens=profile.get("outline_max_tokens", 32000),
@@ -125,10 +167,10 @@ def generate_outlines(bc: BatchClient, profile, titles, output_dirs):
     results = bc.submit_and_wait(requests, label="outlines")
 
     outlines = {}
-    for (title, wc), out_dir in zip(titles, output_dirs):
-        cid = f"outline__{out_dir.name}"
+    for idx, ((vid, title, wc), out_dir) in enumerate(zip(titles, output_dirs)):
+        cid = f"outline-{idx}"
         if cid not in results:
-            print(f"  SKIP: outline failed for '{title}'")
+            print(f"  SKIP: outline failed for {vid} '{title}'")
             continue
         raw = results[cid].strip()
         if raw.startswith("```"):
@@ -138,12 +180,12 @@ def generate_outlines(bc: BatchClient, profile, titles, output_dirs):
         try:
             data = json.loads(raw)
         except json.JSONDecodeError as e:
-            print(f"  ERROR: outline JSON parse failed for '{title}': {e}")
+            print(f"  ERROR: outline JSON parse failed for {vid} '{title}': {e}")
             (out_dir / "outline_raw.txt").write_text(raw, encoding="utf-8")
             continue
         write_text(out_dir / "outline.json", json.dumps(data, indent=2, ensure_ascii=False))
-        outlines[out_dir.name] = data
-        print(f"  [{out_dir.name}] outline: {len(data.get('sections', []))} sections")
+        outlines[vid] = data
+        print(f"  [{vid}] outline: {len(data.get('sections', []))} sections")
     return outlines
 
 
@@ -153,13 +195,14 @@ def generate_sections(bc: BatchClient, profile, sop_text, titles, output_dirs, o
     context_window = profile.get("context_window_words", 1500)
 
     active = []
-    for (title, wc), out_dir in zip(titles, output_dirs):
-        if out_dir.name not in outlines:
+    for idx, ((vid, title, wc), out_dir) in enumerate(zip(titles, output_dirs)):
+        if vid not in outlines:
             continue
-        sections = outlines[out_dir.name].get("sections", [])
-        script_path = out_dir / "script.txt"
+        sections = outlines[vid].get("sections", [])
+        script_path = out_dir / f"{vid}.txt"
         script_path.write_text("", encoding="utf-8")
         active.append({
+            "idx": idx, "vid": vid,
             "title": title, "wc": wc, "dir": out_dir,
             "sections": sections, "script_path": script_path,
         })
@@ -184,7 +227,7 @@ def generate_sections(bc: BatchClient, profile, sop_text, titles, output_dirs, o
 
             user_prompt = profile["section_user_prompt_template"].format(
                 sop_text=sop_text,
-                outline_json=json.dumps(outlines[a["dir"].name], ensure_ascii=False),
+                outline_json=json.dumps(outlines[a["vid"]], ensure_ascii=False),
                 previous_script_tail=prev_tail,
                 context_window_words=context_window,
                 section_id=sec["id"],
@@ -192,7 +235,7 @@ def generate_sections(bc: BatchClient, profile, sop_text, titles, output_dirs, o
                 section_word_target=sec.get("word_target", ""),
             )
 
-            cid = f"sec__{a['dir'].name}__{slot}"
+            cid = f"sec-{a['idx']}-{slot}"
             requests.append(bc.build_request(
                 custom_id=cid,
                 system=build_system_blocks(profile, sop_text, "section"),
@@ -208,19 +251,20 @@ def generate_sections(bc: BatchClient, profile, sop_text, titles, output_dirs, o
 
         for cid, a, sec in slot_jobs:
             if cid not in results:
-                print(f"  SKIP: {a['dir'].name} section {sec['id']} failed")
+                print(f"  SKIP: {a['vid']} section {sec['id']} failed")
                 continue
             text = results[cid].rstrip() + "\n\n"
             append_text(a["script_path"], text)
             total = count_words(a["script_path"].read_text(encoding="utf-8"))
             added = count_words(text)
-            print(f"  [{a['dir'].name}] section {sec['id']}: +{added} words (total {total}/{a['wc']})")
+            print(f"  [{a['vid']}] section {sec['id']}: +{added} words (total {total}/{a['wc']})")
 
 
 def main():
     print("=== Batch Script Generator ===\n")
     cfg = load_config()
     working_folder = prompt_working_folder(cfg.get("default_working_folder", "./outputs"))
+    titles = load_titles_file(working_folder)
     profile_name = prompt_profile()
 
     profile_dir = PROFILES_DIR / profile_name
@@ -231,23 +275,22 @@ def main():
     model = profile.get("model", cfg.get("model", "claude-opus-4-7"))
     poll_interval = cfg.get("poll_interval_seconds", 30)
 
-    titles = prompt_titles()
-
     print("\n=== Summary ===")
     print(f"Profile:        {profile_name}")
     print(f"Model:          {model}")
     print(f"Working folder: {working_folder}")
+    print(f"Titles file:    {working_folder / TITLES_FILENAME}")
     print(f"Titles:         {len(titles)}")
-    for t, wc in titles:
-        print(f"   - {t} ({wc} words)")
+    for vid, t, wc in titles:
+        print(f"   - [{vid}] {t} ({wc} words)")
     confirm = input("\nStart generation? [Y/n]: ").strip().lower()
     if confirm and confirm != "y":
         print("Cancelled.")
         return
 
     output_dirs = []
-    for title, _ in titles:
-        folder = working_folder / sanitize_folder_name(title)
+    for vid, _title, _wc in titles:
+        folder = working_folder / vid
         folder.mkdir(parents=True, exist_ok=True)
         output_dirs.append(folder)
 
@@ -263,13 +306,13 @@ def main():
     generate_sections(bc, profile, sop_text, titles, output_dirs, outlines)
 
     print("\n=== Done ===")
-    for (title, wc), out_dir in zip(titles, output_dirs):
-        script_path = out_dir / "script.txt"
+    for (vid, title, wc), out_dir in zip(titles, output_dirs):
+        script_path = out_dir / f"{vid}.txt"
         if script_path.exists():
             words = count_words(script_path.read_text(encoding="utf-8"))
-            print(f"  {title}: {words} words -> {script_path}")
+            print(f"  [{vid}] {title}: {words} words -> {script_path}")
         else:
-            print(f"  {title}: FAILED (no script written)")
+            print(f"  [{vid}] {title}: FAILED (no script written)")
 
 
 if __name__ == "__main__":
