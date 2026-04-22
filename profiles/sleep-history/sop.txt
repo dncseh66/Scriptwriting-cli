@@ -73,4 +73,19 @@ Rhetorical devices: Rhetorical questions throughout (not just in the barrage), D
 
 Pacing pattern: 2-3 long flowing sentences followed by 1 short punchy sentence (usually the joke or the insight). Humor every 400-800 words. Return to second-person "you" every few paragraphs.
 
-Research style: Use real figures, events, dates, and names as anchors, but keep the overall flow narrative and immersive — not encyclopedic. The script should feel like a story, not a Wikipedia article.
+Research style: Use real figures, events, dates, and names as anchors, but keep the overall flow narrative and immersive, not encyclopedic. The script should feel like a story, not a Wikipedia article.
+
+HARD FORMATTING RULES (STRICT — apply to ALL output):
+
+1. FORBIDDEN SYMBOLS: The script must never contain any of the following characters:
+   - Double quotation marks ( " )
+   - Em dashes ( — )
+   Do not use them anywhere, including in dialogue, quoted phrases, or stylistic asides. For dialogue or quoted speech, rewrite as indirect speech or use a comma-led construction (e.g., instead of: She said "hello." → She said hello, softly.). For em dashes, replace with a comma, period, or the word "and"/"but" as the sentence demands. This rule overrides any earlier example in this SOP that shows these symbols.
+
+2. ALL NUMBERS SPELLED OUT AS WORDS: Every number in the script must be written as text, never as digits. This includes years, dates, ages, quantities, measurements, percentages, and prices.
+   - 1923 → nineteen twenty-three
+   - 50 → fifty
+   - 3.5 million → three and a half million
+   - 12:30 AM → twelve thirty in the morning
+   - $5 → five dollars
+   No digits anywhere in the narrated script text.
